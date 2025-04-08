@@ -228,7 +228,7 @@ export default function Home() {
       <main>
         <h1 className="title">GitHub Repository Analyzer</h1>
         <p className="description">
-          Analyze repositories and get detailed metrics on code quality
+          A powerful tool that analyzes GitHub repositories and rates them on various quality metrics. Get insights into your codebase and discover ways to improve it.
         </p>
         
         {error && (
@@ -262,47 +262,6 @@ export default function Home() {
           </div>
         )}
 
-        {!loading && savedAnalyses.length > 0 && (
-          <div className="saved-analyses">
-            <div className="saved-header">
-              <h3>Saved Analyses</h3>
-              {savedAnalyses.length > 1 && (
-                <button 
-                  className="compare-button"
-                  onClick={toggleComparison}
-                >
-                  {comparing ? 'Hide Comparison' : 'Compare Repositories'}
-                </button>
-              )}
-            </div>
-            <div className={`analyses-list ${comparing ? 'comparison-mode' : ''}`}>
-              {savedAnalyses.map((analysis) => (
-                <div 
-                  key={analysis.id}
-                  className={`analysis-item ${activeAnalysis && activeAnalysis.id === analysis.id ? 'active' : ''}`}
-                  onClick={() => viewSavedAnalysis(analysis.id)}
-                >
-                  <div className="analysis-info">
-                    <div className="repo-name">{analysis.repoName}</div>
-                    <div className="analysis-date">{formatDate(analysis.timestamp)}</div>
-                    <div className="analysis-score">
-                      Score: <span className={`score-${getScoreInterpretation(analysis.results.overallScore).label.toLowerCase()}`}>
-                        {analysis.results.overallScore.toFixed(1)}/10
-                      </span>
-                    </div>
-                  </div>
-                  <button 
-                    className="delete-button"
-                    onClick={(e) => deleteSavedAnalysis(analysis.id, e)}
-                  >
-                    &times;
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
         {activeAnalysis && !loading && (
           <div className="results">
             <h2>
@@ -330,7 +289,7 @@ export default function Home() {
           Analyze and rate GitHub repositories based on code quality metrics
         </p>
         <p className="github-link">
-          <a href="https://github.com/yourusername/github-repo-analyzer" target="_blank" rel="noopener noreferrer">
+          <a href="https://github.com/mikefara123/github-repo-analyzer" target="_blank" rel="noopener noreferrer">
             View on GitHub
           </a>
         </p>

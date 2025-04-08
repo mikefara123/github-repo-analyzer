@@ -2,7 +2,7 @@
 
 A powerful web application that analyzes GitHub repositories and provides comprehensive quality metrics, helping developers and teams identify areas for improvement in their codebases.
 
-![GitHub Repository Analyzer](https://github.com/yourusername/github-repo-analyzer/raw/main/public/screenshot.png)
+![GitHub Repository Analyzer](https://github.com/mikefara123/github-repo-analyzer/raw/main/public/screenshot.png)
 
 ## ✨ Features
 
@@ -85,7 +85,7 @@ github-repo-analyzer/
 
 1. Clone this repository:
    ```
-   git clone https://github.com/yourusername/github-repo-analyzer.git
+   git clone https://github.com/mikefara123/github-repo-analyzer.git
    cd github-repo-analyzer
    ```
 

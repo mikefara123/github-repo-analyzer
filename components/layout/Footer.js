@@ -21,7 +21,7 @@ export default function Footer() {
           
           <div className="app-footer-links">
             <a 
-              href="https://github.com/yourusername/github-repo-analyzer" 
+              href="https://github.com/mikefara123/github-repo-analyzer" 
               target="_blank" 
               rel="noopener noreferrer"
               className="app-footer-link"
@@ -30,7 +30,7 @@ export default function Footer() {
             </a>
             <span className="app-divider">|</span>
             <a 
-              href="https://github.com/yourusername/github-repo-analyzer/issues" 
+              href="https://github.com/mikefara123/github-repo-analyzer/issues" 
               target="_blank" 
               rel="noopener noreferrer"
               className="app-footer-link"
@@ -39,7 +39,7 @@ export default function Footer() {
             </a>
             <span className="app-divider">|</span>
             <a 
-              href="https://github.com/yourusername/github-repo-analyzer#contributing" 
+              href="https://github.com/mikefara123/github-repo-analyzer#contributing" 
               target="_blank" 
               rel="noopener noreferrer"
               className="app-footer-link"

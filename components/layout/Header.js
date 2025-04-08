@@ -21,7 +21,7 @@ export default function Header() {
             About
           </Link>
           <a 
-            href="https://github.com/yourusername/github-repo-analyzer" 
+            href="https://github.com/mikefara123/github-repo-analyzer" 
             target="_blank" 
             rel="noopener noreferrer"
             className="app-nav-link app-nav-link-github"

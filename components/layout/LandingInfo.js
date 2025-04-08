@@ -6,14 +6,6 @@ import React from 'react';
 const LandingInfo = () => {
   return (
     <div className="landing-info landing-section">
-      <div className="intro-section">
-        <h2>Repository Analysis Tool</h2>
-        <p className="intro-description">
-          A powerful tool that analyzes GitHub repositories and rates them on various quality metrics.
-          Get insights into your codebase and discover ways to improve it.
-        </p>
-      </div>
-      
       <div className="features-section">
         <h2>Metrics We Analyze</h2>
         
