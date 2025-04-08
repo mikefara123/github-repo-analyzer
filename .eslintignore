@@ -1,0 +1,27 @@
+# Dependency directories
+node_modules/
+.next/
+
+# Build outputs
+out/
+build/
+dist/
+
+# Cache directories
+.cache/
+.npm/
+
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Config files
+next.config.js
+jest.config.js
+
+# Files that are meant to be processed
+*.min.js
+*.bundle.js 

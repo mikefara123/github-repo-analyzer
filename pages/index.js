@@ -66,16 +66,31 @@ export default function Home() {
       // Make sure we're on the client side
       if (typeof window === 'undefined') return;
       
+      // Clean up any existing socket connection
+      if (socket) {
+        console.log('Cleaning up existing socket connection');
+        socket.removeAllListeners();
+        socket.disconnect();
+        socket = null;
+      }
+      
       // Initialize socket connection
       console.log('Fetching socket endpoint');
       const fetchResponse = await fetch('/api/socket');
+      if (!fetchResponse.ok) {
+        throw new Error(`Socket endpoint responded with status: ${fetchResponse.status}`);
+      }
       console.log('Socket endpoint response:', fetchResponse.status);
       
-      // Create socket with correct configuration
+      // Create socket with stable configuration - simplified
       console.log('Creating socket with path /api/socketio');
       socket = io({
         path: '/api/socketio',
-        addTrailingSlash: false
+        transports: ['polling', 'websocket'], // Try polling first for reliability
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000,
+        timeout: 20000
       });
       
       console.log('Socket connection attempt started');
@@ -83,16 +98,50 @@ export default function Home() {
       socket.on('connect', () => {
         console.log('Socket connected successfully:', socket.id);
         setSocketConnected(true);
+        setError(null); // Clear any previous connection errors
       });
       
       socket.on('connect_error', (err) => {
         console.error('Socket connection error:', err.message, err);
         setError(`Connection error: ${err.message}`);
+        setSocketConnected(false);
+        
+        // Attempt to reconnect after a delay (backup for auto-reconnect)
+        setTimeout(() => {
+          if (!socket.connected) {
+            console.log('Attempting manual reconnect...');
+            socket.connect();
+          }
+        }, 3000);
       });
       
-      socket.on('disconnect', () => {
-        console.log('Socket disconnected');
+      socket.on('disconnect', (reason) => {
+        console.log('Socket disconnected:', reason);
         setSocketConnected(false);
+        
+        // Handle specific disconnect reasons
+        if (reason === 'io server disconnect') {
+          // Server disconnected the client, need to reconnect manually
+          setTimeout(() => {
+            console.log('Manual reconnect after server disconnect');
+            socket.connect();
+          }, 1000);
+        }
+        // For other reasons, the socket will auto reconnect
+      });
+      
+      socket.on('reconnect', (attemptNumber) => {
+        console.log('Socket reconnected after', attemptNumber, 'attempts');
+        setSocketConnected(true);
+      });
+      
+      socket.on('reconnect_error', (err) => {
+        console.error('Socket reconnection error:', err.message);
+      });
+      
+      socket.on('reconnect_failed', () => {
+        console.error('Socket reconnection failed after all attempts');
+        setError('Failed to reconnect to analysis server. Please reload the page.');
       });
       
       socket.on('progress', (data) => {
@@ -132,12 +181,13 @@ export default function Home() {
       
       socket.on('error', (error) => {
         console.error('Socket error event received:', error);
-        setError(error.message || 'An error occurred');
+        setError(typeof error === 'string' ? error : 
+                (error.message || 'An error occurred'));
         setLoading(false);
       });
     } catch (error) {
       console.error('Failed to initialize socket:', error);
-      setError('Failed to connect to analysis server. Please try again.');
+      setError(`Failed to connect to analysis server: ${error.message}. Please reload the page.`);
       setLoading(false);
     }
   };

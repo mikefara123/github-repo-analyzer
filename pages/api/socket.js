@@ -29,7 +29,7 @@ const configureSocketServer = (io) => {
         console.log('Sending initial progress update');
         socket.emit('progress', { step: 'init', progress: 0 });
         
-        // Start repository analysis with progress updates
+        // Custom progress updater that skips the code-patterns step
         const updateProgress = (progressData) => {
           // Check if analysis was aborted
           if (activeTasks.get(socket.id)?.aborted) {
@@ -37,19 +37,42 @@ const configureSocketServer = (io) => {
             throw new Error('Analysis cancelled by user');
           }
           
-          console.log(`Sending progress update: ${progressData.step} - ${progressData.progress}%`);
-          socket.emit('progress', progressData);
+          // Skip the code-patterns step that might cause rate limits
+          let updatedProgressData = { ...progressData };
+          if (progressData.step === 'code-patterns') {
+            console.log('Skipping code-patterns step to avoid rate limits');
+            updatedProgressData = { step: 'workflows', progress: 65 };
+          }
+          
+          console.log(`Sending progress update: ${updatedProgressData.step} - ${updatedProgressData.progress}%`);
+          socket.emit('progress', updatedProgressData);
         };
         
-        // Analyze repository
-        console.log('Starting repository analysis');
-        const results = await analyzeRepo(repoUrl, updateProgress);
+        // Set a timeout for the analysis to prevent it from running too long
+        const timeoutMs = parseInt(process.env.ANALYSIS_TIMEOUT_MS) || 60000; // Default 60 seconds
+        
+        // Create a promise that will resolve when the analysis is complete or time out
+        let timeoutId;
+        const timeoutPromise = new Promise((_, reject) => {
+          timeoutId = setTimeout(() => {
+            reject(new Error('Analysis timed out. Repository may be too large to analyze.'));
+          }, timeoutMs);
+        });
+        
+        // Create the analysis promise
+        const analysisPromise = analyzeRepo(repoUrl, updateProgress);
+        
+        // Wait for either the analysis to complete or the timeout to trigger
+        const results = await Promise.race([analysisPromise, timeoutPromise]);
+        
+        // Clear the timeout since we finished before it triggered
+        clearTimeout(timeoutId);
         
         // Send results back to client
         console.log('Analysis complete, sending results to client');
         socket.emit('analysisResults', {
           status: 'success',
-          repoName: results.repoName || repoUrl,
+          repoName: results.details?.repoInfo?.name || repoUrl,
           results: results
         });
         
@@ -57,7 +80,20 @@ const configureSocketServer = (io) => {
         activeTasks.delete(socket.id);
       } catch (error) {
         console.error('Analysis error occurred:', error.message);
-        socket.emit('error', { message: error.message });
+        
+        // Handle specific errors
+        let errorMessage = error.message;
+        
+        // Friendly messages for common errors
+        if (error.message.includes('rate limit') || error.message.includes('quota exhausted')) {
+          errorMessage = 'GitHub API rate limit exceeded. Please try again later or provide a GitHub token.';
+        } else if (error.message.includes('timeout')) {
+          errorMessage = 'Analysis timed out. The repository may be too large or complex to analyze.';
+        } else if (error.message.includes('not found')) {
+          errorMessage = 'Repository not found. Please check the URL and try again.';
+        }
+        
+        socket.emit('error', { message: errorMessage });
         
         // Clean up
         activeTasks.delete(socket.id);
@@ -94,32 +130,34 @@ const configureSocketServer = (io) => {
 const SocketHandler = (req, res) => {
   console.log('Socket handler invoked, method:', req.method);
   
-  // Socket.io server needs specific handling for Next.js API routes
-  if (!res.socket.server.io) {
-    console.log('Initializing Socket.io server...');
-    
-    // Create new Socket.io instance
-    const io = new Server(res.socket.server, {
-      path: '/api/socketio',
-      addTrailingSlash: false,
-      cors: {
-        origin: '*',
-        methods: ['GET', 'POST']
-      }
-    });
-    
-    // Store the io instance on the server
-    res.socket.server.io = io;
-    
-    // Configure socket server handlers
-    configureSocketServer(io);
-    
-    console.log('Socket.io server initialized with path /api/socketio');
-  } else {
+  if (res.socket.server.io) {
     console.log('Socket.io server already running');
+    res.status(200).end();
+    return;
   }
   
-  console.log('Socket handler responding with 200 OK');
+  console.log('Initializing Socket.io server...');
+  
+  // Create new Socket.io instance with simplified configuration
+  const io = new Server(res.socket.server, {
+    path: '/api/socketio',
+    transports: ['polling', 'websocket'],
+    cors: {
+      origin: '*',
+      methods: ['GET', 'POST']
+    },
+    connectTimeout: 45000,
+    pingTimeout: 30000,
+    pingInterval: 25000
+  });
+  
+  // Store the io instance on the server
+  res.socket.server.io = io;
+  
+  // Configure socket server handlers
+  configureSocketServer(io);
+  
+  console.log('Socket.io server initialized with path /api/socketio');
   res.status(200).end();
 };
 
