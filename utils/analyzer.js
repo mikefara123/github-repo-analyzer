@@ -1,4 +1,5 @@
 import { Octokit } from 'octokit';
+import { safeDetectCodePatterns } from './detectCodePatterns';
 
 // Define analysis steps for progress tracking
 export const ANALYSIS_STEPS = [
@@ -54,46 +55,64 @@ export const analyzeRepo = async (repoUrl, updateProgress = () => {}) => {
   
   console.log('Starting analysis for repository:', repoUrl);
   
-  try {
-    // Initialize the GitHub API client
-    const token = process.env.GITHUB_TOKEN;
-    if (!token) {
-      console.warn('No GitHub token found. API rate limits may apply.');
+  // Initialize results object early so we can return partial results if needed
+  const results = {
+    codeComplexity: 5, // Default baseline values
+    documentationCoverage: 5,
+    testCoverage: 5,
+    styleConsistency: 5,
+    securityVulnerabilities: 5,
+    maintainabilityIndex: 5,
+    codeDuplication: 5,
+    fileOrganization: 5,
+    dependencyManagement: 5,
+    overallScore: 5,
+    // Flag bonus metrics that shouldn't penalize the overall score
+    bonusMetrics: ['dependencyManagement'],
+    details: {
+      repoInfo: null,
+      languages: null,
+      contributors: null,
+      commitActivity: null,
+      detectedPatterns: [],
+      codeQualityIssues: []
     }
+  };
+  
+  try {
+    // Track rate limit errors to determine when to skip steps
+    let hasHitRateLimit = false;
     
-    const octokit = new Octokit({
-      auth: token || undefined,
-    });
+    // Initialize the GitHub API client with improved error handling
+    const token = process.env.GITHUB_TOKEN;
+    let octokit;
+    
+    try {
+      octokit = new Octokit({
+        auth: token || undefined,
+        request: {
+          timeout: 10000 // 10-second timeout for requests
+        }
+      });
+      
+      // Test the token with a simple API call
+      await octokit.rest.users.getAuthenticated();
+      console.log('GitHub API authenticated successfully');
+    } catch (error) {
+      console.warn('GitHub API authentication failed. Continuing without authentication:', error.message);
+      // Fallback to unauthenticated requests (with lower rate limits)
+      octokit = new Octokit({
+        request: {
+          timeout: 10000 // 10-second timeout for requests
+        }
+      });
+    }
     
     // Update progress: Initializing
     updateProgress({ step: 'init', progress: 0 });
     
     // Extract repo info from URL
     const { owner, repo } = extractRepoInfo(repoUrl);
-    
-    // Initialize results object
-    const results = {
-      codeComplexity: 0,
-      documentationCoverage: 0,
-      testCoverage: 0,
-      styleConsistency: 0,
-      securityVulnerabilities: 0,
-      maintainabilityIndex: 0,
-      codeDuplication: 0,
-      fileOrganization: 0,
-      dependencyManagement: 0,
-      overallScore: 0,
-      // Flag bonus metrics that shouldn't penalize the overall score
-      bonusMetrics: ['dependencyManagement'],
-      details: {
-        repoInfo: null,
-        languages: null,
-        contributors: null,
-        commitActivity: null,
-        detectedPatterns: [],
-        codeQualityIssues: []
-      }
-    };
     
     // Step 1: Get basic repository information
     updateProgress({ step: 'repo-info', progress: 7 });
@@ -112,595 +131,593 @@ export const analyzeRepo = async (repoUrl, updateProgress = () => {}) => {
       results.maintainabilityIndex = Math.min(10, Math.max(1, 10 - openIssuesRatio));
     } catch (error) {
       console.error('Error getting repository info:', error);
+      if (error.message && (error.message.includes('rate limit') || error.message.includes('quota exhausted'))) {
+        hasHitRateLimit = true;
+      }
+      // Continue with default values
     }
     
-    // Step 2: Analyze repository structure
-    updateProgress({ step: 'contents', progress: 14 });
-    try {
-      // Check for important files and directories
-      const fileChecks = [
-        { path: '', name: '.github/workflows', type: 'dir' },
-        { path: '', name: '.github/CODEOWNERS', type: 'file' },
-        { path: '', name: 'README.md', type: 'file' },
-        { path: '', name: 'LICENSE', type: 'file' },
-        { path: '', name: 'CONTRIBUTING.md', type: 'file' },
-        { path: '', name: 'CODE_OF_CONDUCT.md', type: 'file' },
-        { path: '', name: '.eslintrc.json', type: 'file' },
-        { path: '', name: '.eslintrc.js', type: 'file' },
-        { path: '', name: '.prettierrc', type: 'file' },
-        { path: '', name: '.editorconfig', type: 'file' },
-        { path: '', name: 'package.json', type: 'file' },
-        { path: '', name: 'package-lock.json', type: 'file' },
-        { path: '', name: 'yarn.lock', type: 'file' },
-        { path: '', name: 'tests', type: 'dir' },
-        { path: '', name: 'test', type: 'dir' },
-        { path: '', name: '__tests__', type: 'dir' },
-        { path: '', name: 'docs', type: 'dir' },
-        { path: '', name: 'src', type: 'dir' },
-        { path: '', name: 'src/components', type: 'dir' },
-        { path: '', name: 'src/containers', type: 'dir' },
-        { path: '', name: 'src/services', type: 'dir' },
-        { path: '', name: 'src/utils', type: 'dir' },
-        { path: '', name: 'src/hooks', type: 'dir' },
-        { path: '', name: 'src/providers', type: 'dir' },
-        { path: '', name: 'src/context', type: 'dir' },
-        { path: '', name: 'src/models', type: 'dir' },
-        { path: '', name: 'src/store', type: 'dir' },
-      ];
+    // If we hit rate limits early, just calculate the score with what we have
+    if (hasHitRateLimit) {
+      console.warn('Hit rate limits during basic repository information. Proceeding with limited analysis.');
+      // Skip to final score calculation
+    } else {
+      // Continue with full analysis
       
-      const filePresence = {};
+      // Step 2: Analyze repository structure
+      updateProgress({ step: 'contents', progress: 14 });
+      try {
+        // Check for important files and directories
+        const fileChecks = [
+          { path: '', name: '.github/workflows', type: 'dir' },
+          { path: '', name: '.github/CODEOWNERS', type: 'file' },
+          { path: '', name: 'README.md', type: 'file' },
+          { path: '', name: 'LICENSE', type: 'file' },
+          { path: '', name: 'CONTRIBUTING.md', type: 'file' },
+          { path: '', name: 'CODE_OF_CONDUCT.md', type: 'file' },
+          { path: '', name: '.eslintrc.json', type: 'file' },
+          { path: '', name: '.eslintrc.js', type: 'file' },
+          { path: '', name: '.prettierrc', type: 'file' },
+          { path: '', name: '.editorconfig', type: 'file' },
+          { path: '', name: 'package.json', type: 'file' },
+          { path: '', name: 'package-lock.json', type: 'file' },
+          { path: '', name: 'yarn.lock', type: 'file' },
+          { path: '', name: 'tests', type: 'dir' },
+          { path: '', name: 'test', type: 'dir' },
+          { path: '', name: '__tests__', type: 'dir' },
+          { path: '', name: 'docs', type: 'dir' },
+          { path: '', name: 'src', type: 'dir' },
+          { path: '', name: 'src/components', type: 'dir' },
+          { path: '', name: 'src/containers', type: 'dir' },
+          { path: '', name: 'src/services', type: 'dir' },
+          { path: '', name: 'src/utils', type: 'dir' },
+          { path: '', name: 'src/hooks', type: 'dir' },
+          { path: '', name: 'src/providers', type: 'dir' },
+          { path: '', name: 'src/context', type: 'dir' },
+          { path: '', name: 'src/models', type: 'dir' },
+          { path: '', name: 'src/store', type: 'dir' },
+        ];
+        
+        const filePresence = {};
+        
+        // Check each file/directory
+        for (const check of fileChecks) {
+          try {
+            await octokit.rest.repos.getContent({
+              owner,
+              repo,
+              path: check.name,
+            });
+            filePresence[check.name] = true;
+          } catch (err) {
+            filePresence[check.name] = false;
+          }
+        }
+        
+        // Calculate scores based on file presence
+        
+        // Documentation score
+        const documentationFiles = [
+          'README.md', 
+          'LICENSE', 
+          'CONTRIBUTING.md', 
+          'CODE_OF_CONDUCT.md',
+          'docs'
+        ];
+        
+        const docScore = documentationFiles.reduce((score, file) => {
+          return score + (filePresence[file] ? 2 : 0);
+        }, 0);
+        
+        results.documentationCoverage = Math.min(10, docScore);
+        
+        // Style consistency score
+        const styleFiles = [
+          '.eslintrc.json',
+          '.eslintrc.js',
+          '.prettierrc',
+          '.editorconfig'
+        ];
+        
+        const styleScore = styleFiles.reduce((score, file) => {
+          return score + (filePresence[file] ? 2.5 : 0);
+        }, 0);
+        
+        results.styleConsistency = Math.min(10, styleScore);
+        
+        // Dependency management score
+        const depFiles = [
+          'package.json',
+          'package-lock.json',
+          'yarn.lock'
+        ];
+        
+        const depScore = depFiles.reduce((score, file) => {
+          return score + (filePresence[file] ? 3.5 : 0);
+        }, 0);
+        
+        results.dependencyManagement = Math.min(10, depScore);
+        
+        // Test coverage score
+        const testDirs = [
+          'tests',
+          'test',
+          '__tests__'
+        ];
+        
+        const testDirExists = testDirs.some(dir => filePresence[dir]);
+        results.testCoverage = testDirExists ? 7 : 3;
+        
+        // File organization score update
+        const orgDirs = [
+          'src',
+          'docs',
+          'test',
+          'tests',
+          '__tests__'
+        ];
+        
+        const orgScore = orgDirs.reduce((score, dir) => {
+          return score + (filePresence[dir] ? 2 : 0);
+        }, results.fileOrganization / 2);
+        
+        results.fileOrganization = Math.min(10, orgScore);
+        
+        // Security score
+        const securityFiles = [
+          '.github/workflows',
+          '.github/CODEOWNERS'
+        ];
+        
+        const secScore = securityFiles.reduce((score, file) => {
+          return score + (filePresence[file] ? 5 : 0);
+        }, 0);
+        
+        results.securityVulnerabilities = Math.min(10, secScore);
+      } catch (error) {
+        console.error('Error analyzing repository structure:', error);
+      }
       
-      // Check each file/directory
-      for (const check of fileChecks) {
+      // Step 3: Analyze languages used
+      updateProgress({ step: 'languages', progress: 21 });
+      try {
+        const { data: languages } = await octokit.rest.repos.listLanguages({
+          owner,
+          repo
+        });
+        
+        results.details.languages = languages;
+        
+        // Code complexity score based on languages used
+        const totalBytes = Object.values(languages).reduce((sum, bytes) => sum + bytes, 0);
+        const languageCount = Object.keys(languages).length;
+        
+        // Higher score for repositories with more focused language usage
+        results.codeComplexity = Math.min(10, Math.max(1, 10 - (languageCount - 1)));
+        
+        // Code duplication estimate based on repository size and languages
+        // This is a rough estimate since we can't directly measure duplication without cloning
+        const primaryLanguageBytes = Math.max(...Object.values(languages));
+        const primaryLanguageRatio = primaryLanguageBytes / totalBytes;
+        
+        // Higher primary language ratio might suggest less duplication (more focused)
+        results.codeDuplication = Math.min(10, Math.max(1, primaryLanguageRatio * 10));
+      } catch (error) {
+        console.error('Error analyzing languages:', error);
+      }
+      
+      // Step 4: Analyze contributors
+      updateProgress({ step: 'contributors', progress: 28 });
+      try {
+        const { data: contributors } = await octokit.rest.repos.listContributors({
+          owner,
+          repo,
+          per_page: 100
+        });
+        
+        results.details.contributors = contributors;
+        
+        // Adjust maintainability based on number of contributors
+        const contributorCount = contributors.length;
+        const contributorScore = Math.min(5, contributorCount / 2);
+        
+        results.maintainabilityIndex = Math.min(10, (results.maintainabilityIndex + contributorScore) / 2);
+      } catch (error) {
+        console.error('Error analyzing contributors:', error);
+      }
+      
+      // Step 5: Analyze commit history
+      updateProgress({ step: 'commits', progress: 35 });
+      try {
+        const { data: commitActivity } = await octokit.rest.repos.getCommitActivityStats({
+          owner,
+          repo
+        });
+        
+        results.details.commitActivity = commitActivity;
+        
+        // Calculate commit frequency
+        let totalCommits = 0;
+        if (commitActivity) {
+          totalCommits = commitActivity.reduce((sum, week) => sum + week.total, 0);
+        }
+        
+        // Get repo age in weeks
+        const createdAt = new Date(results.details.repoInfo.created_at);
+        const now = new Date();
+        const ageInWeeks = Math.max(1, Math.floor((now - createdAt) / (1000 * 60 * 60 * 24 * 7)));
+        
+        // Calculate average commits per week
+        const commitsPerWeek = totalCommits / ageInWeeks;
+        
+        // Score based on commit frequency
+        results.commitHistory = Math.min(10, Math.max(1, Math.log2(commitsPerWeek + 1) * 3));
+      } catch (error) {
+        console.error('Error analyzing commit history:', error);
+      }
+      
+      // Step 6: Analyze branches
+      updateProgress({ step: 'branches', progress: 42 });
+      try {
+        const { data: branches } = await octokit.rest.repos.listBranches({
+          owner,
+          repo,
+          per_page: 100
+        });
+        
+        // Number of branches can indicate development activity and organization
+        const branchCount = branches.length;
+        
+        // Adjust file organization score based on branch count
+        // Too few branches might indicate poor organization, too many might indicate chaos
+        const branchScore = Math.min(5, 5 * (1 - Math.abs(Math.log10(branchCount) - 1) / 2));
+        
+        results.fileOrganization = Math.min(10, (results.fileOrganization + branchScore) / 2);
+      } catch (error) {
+        console.error('Error analyzing branches:', error);
+      }
+      
+      // Step 7: Check pull requests
+      updateProgress({ step: 'pull-requests', progress: 49 });
+      try {
+        const { data: pullRequests } = await octokit.rest.pulls.list({
+          owner,
+          repo,
+          state: 'all',
+          per_page: 100
+        });
+        
+        // Analyze PR process
+        const openPRs = pullRequests.filter(pr => pr.state === 'open').length;
+        const closedPRs = pullRequests.filter(pr => pr.state === 'closed').length;
+        const totalPRs = openPRs + closedPRs;
+        
+        if (totalPRs > 0) {
+          // PR close ratio indicates how well the project handles contributions
+          const closeRatio = closedPRs / totalPRs;
+          
+          // Adjust maintainability score based on PR process
+          const prScore = closeRatio * 10;
+          
+          results.maintainabilityIndex = Math.min(10, (results.maintainabilityIndex + prScore) / 2);
+        }
+      } catch (error) {
+        console.error('Error analyzing pull requests:', error);
+      }
+      
+      // Step 8: Review issues
+      updateProgress({ step: 'issues', progress: 56 });
+      try {
+        const { data: issues } = await octokit.rest.issues.listForRepo({
+          owner,
+          repo,
+          state: 'all',
+          per_page: 100
+        });
+        
+        // Analyze issue handling
+        const openIssues = issues.filter(issue => issue.state === 'open' && !issue.pull_request).length;
+        const closedIssues = issues.filter(issue => issue.state === 'closed' && !issue.pull_request).length;
+        const totalIssues = openIssues + closedIssues;
+        
+        if (totalIssues > 0) {
+          // Issue close ratio indicates how responsive the project is
+          const closeRatio = closedIssues / totalIssues;
+          
+          // Adjust maintainability score based on issue handling
+          const issueScore = closeRatio * 10;
+          
+          results.maintainabilityIndex = Math.min(10, (results.maintainabilityIndex + issueScore) / 2);
+        }
+      } catch (error) {
+        console.error('Error analyzing issues:', error);
+      }
+      
+      // New Step: Analyze Code Patterns (before workflows)
+      updateProgress({ step: 'code-patterns', progress: 60 });
+      try {
+        // Use a very small number of files to check to avoid rate limits
+        const filesToCheck = ['README.md', 'package.json'];
+        
+        // Try just one file at a time and stop if we hit any errors
+        for (const filePath of filesToCheck) {
+          try {
+            // Get file content
+            const { data: fileData } = await octokit.rest.repos.getContent({
+              owner,
+              repo,
+              path: filePath,
+            });
+            
+            // Only process text files
+            if (fileData && fileData.type === 'file') {
+              const content = Buffer.from(fileData.content, 'base64').toString();
+              
+              // Store basic file info in results
+              if (filePath === 'README.md') {
+                // Very basic readme quality check
+                if (content.length > 1000) {
+                  results.documentationCoverage = Math.max(results.documentationCoverage, 7);
+                } else if (content.length > 500) {
+                  results.documentationCoverage = Math.max(results.documentationCoverage, 5);
+                }
+              }
+              
+              if (filePath === 'package.json') {
+                try {
+                  const packageData = JSON.parse(content);
+                  
+                  // Check for basic quality signals
+                  if (packageData.dependencies) {
+                    results.dependencyManagement = Math.max(results.dependencyManagement, 7);
+                  }
+                  
+                  if (packageData.scripts && packageData.scripts.test) {
+                    results.testCoverage = Math.max(results.testCoverage, 6);
+                  }
+                  
+                  if (packageData.scripts && packageData.scripts.lint) {
+                    results.styleConsistency = Math.max(results.styleConsistency, 6);
+                  }
+                } catch (e) {
+                  // Ignore JSON parse errors
+                }
+              }
+            }
+          } catch (error) {
+            // If we hit any error, just abort pattern detection
+            console.warn(`Error getting ${filePath}, skipping remaining pattern detection:`, error.message);
+            if (error.message && (error.message.includes('rate limit') || error.message.includes('quota exhausted'))) {
+              // Set a flag to skip remaining API-heavy steps
+              hasHitRateLimit = true;
+            }
+            break;
+          }
+        }
+      } catch (error) {
+        console.error('Error in code pattern detection:', error);
+        // Continue with the analysis even on error
+      }
+      
+      // Step 9: Check CI/CD workflows
+      updateProgress({ step: 'workflows', progress: 63 });
+      try {
+        // Check if the repository has GitHub Actions workflows
+        try {
+          const { data: workflows } = await octokit.rest.actions.listRepoWorkflows({
+            owner,
+            repo
+          });
+          
+          if (workflows && workflows.total_count > 0) {
+            // Having CI/CD workflows improves security and code quality
+            results.securityVulnerabilities = Math.min(10, results.securityVulnerabilities + 3);
+            results.styleConsistency = Math.min(10, results.styleConsistency + 2);
+          }
+        } catch (err) {
+          // GitHub Actions might not be enabled for this repo
+        }
+      } catch (error) {
+        console.error('Error checking workflows:', error);
+      }
+      
+      // Step 10: Analyze README for comprehensiveness
+      updateProgress({ step: 'readme', progress: 70 });
+      try {
+        try {
+          const { data: readmeData } = await octokit.rest.repos.getReadme({
+            owner,
+            repo
+          });
+          
+          if (readmeData) {
+            // Get README content
+            const readmeContent = Buffer.from(readmeData.content, 'base64').toString();
+            
+            // Analyze README quality based on length and sections
+            const readmeLength = readmeContent.length;
+            const hasHeadings = (readmeContent.match(/#+\s+\w+/g) || []).length;
+            const hasCodeBlocks = (readmeContent.match(/```/g) || []).length > 1;
+            const hasImages = readmeContent.includes('![');
+            
+            // Score based on README quality
+            let readmeScore = 0;
+            if (readmeLength > 500) readmeScore += 2;
+            if (readmeLength > 2000) readmeScore += 2;
+            if (hasHeadings > 3) readmeScore += 2;
+            if (hasCodeBlocks) readmeScore += 2;
+            if (hasImages) readmeScore += 2;
+            
+            // Update documentation score
+            results.documentationCoverage = Math.min(10, (results.documentationCoverage + readmeScore) / 2);
+          }
+        } catch (err) {
+          // README might not exist
+        }
+      } catch (error) {
+        console.error('Error analyzing README:', error);
+      }
+      
+      // Step 11: Check for package.json and analyze dependencies
+      updateProgress({ step: 'dependencies', progress: 77 });
+      try {
+        try {
+          const { data: packageJson } = await octokit.rest.repos.getContent({
+            owner,
+            repo,
+            path: 'package.json'
+          });
+          
+          if (packageJson) {
+            // Parse package.json
+            const packageData = JSON.parse(Buffer.from(packageJson.content, 'base64').toString());
+            
+            // Check dependencies
+            const hasDependencies = packageData.dependencies && Object.keys(packageData.dependencies).length > 0;
+            const hasDevDependencies = packageData.devDependencies && Object.keys(packageData.devDependencies).length > 0;
+            
+            // Check for testing frameworks
+            const testingDeps = ['jest', 'mocha', 'jasmine', 'karma', 'chai', 'cypress', 'enzyme', '@testing-library'];
+            const hasTestingDeps = hasDevDependencies && testingDeps.some(dep => 
+              Object.keys(packageData.devDependencies).some(d => d.includes(dep))
+            );
+            
+            // Check for linting tools
+            const lintingDeps = ['eslint', 'prettier', 'tslint', 'stylelint'];
+            const hasLintingDeps = hasDevDependencies && lintingDeps.some(dep => 
+              Object.keys(packageData.devDependencies).some(d => d.includes(dep))
+            );
+            
+            // Security related packages
+            const securityDeps = ['helmet', 'csrf', 'xss', 'sanitize', 'validate'];
+            const hasSecurityDeps = hasDependencies && securityDeps.some(dep => 
+              Object.keys(packageData.dependencies).some(d => d.includes(dep))
+            );
+            
+            // Update scores
+            if (hasTestingDeps) {
+              results.testCoverage = Math.min(10, results.testCoverage + 3);
+            }
+            
+            if (hasLintingDeps) {
+              results.styleConsistency = Math.min(10, results.styleConsistency + 2);
+            }
+            
+            if (hasSecurityDeps) {
+              results.securityVulnerabilities = Math.min(10, results.securityVulnerabilities + 2);
+            }
+            
+            // Overall dependency management score - improved to be more lenient
+            let depManagementScore = 5;  // Start with a moderate baseline
+            if (hasDependencies) depManagementScore += 2;
+            if (hasDevDependencies) depManagementScore += 1;
+            if (packageData.scripts && Object.keys(packageData.scripts).length > 0) depManagementScore += 1;
+            if (packageData.scripts && Object.keys(packageData.scripts).length > 3) depManagementScore += 1;
+            
+            // Check for dependency version pinning (a best practice)
+            const hasPinnedVersions = Object.entries(packageData.dependencies || {}).some(
+              ([_, version]) => /^\d/.test(version)
+            );
+            if (hasPinnedVersions) depManagementScore += 1;
+            
+            results.dependencyManagement = Math.min(10, depManagementScore);
+          }
+        } catch (err) {
+          // package.json might not exist
+        }
+      } catch (error) {
+        console.error('Error analyzing dependencies:', error);
+      }
+      
+      // Step 12: Security analysis
+      updateProgress({ step: 'security', progress: 84 });
+      try {
+        // Check for security policies
         try {
           await octokit.rest.repos.getContent({
             owner,
             repo,
-            path: check.name,
+            path: 'SECURITY.md'
           });
-          filePresence[check.name] = true;
+          
+          // Has security policy
+          results.securityVulnerabilities = Math.min(10, results.securityVulnerabilities + 2);
         } catch (err) {
-          filePresence[check.name] = false;
+          // SECURITY.md doesn't exist
         }
-      }
-      
-      // Calculate scores based on file presence
-      
-      // Documentation score
-      const documentationFiles = [
-        'README.md', 
-        'LICENSE', 
-        'CONTRIBUTING.md', 
-        'CODE_OF_CONDUCT.md',
-        'docs'
-      ];
-      
-      const docScore = documentationFiles.reduce((score, file) => {
-        return score + (filePresence[file] ? 2 : 0);
-      }, 0);
-      
-      results.documentationCoverage = Math.min(10, docScore);
-      
-      // Style consistency score
-      const styleFiles = [
-        '.eslintrc.json',
-        '.eslintrc.js',
-        '.prettierrc',
-        '.editorconfig'
-      ];
-      
-      const styleScore = styleFiles.reduce((score, file) => {
-        return score + (filePresence[file] ? 2.5 : 0);
-      }, 0);
-      
-      results.styleConsistency = Math.min(10, styleScore);
-      
-      // Dependency management score
-      const depFiles = [
-        'package.json',
-        'package-lock.json',
-        'yarn.lock'
-      ];
-      
-      const depScore = depFiles.reduce((score, file) => {
-        return score + (filePresence[file] ? 3.5 : 0);
-      }, 0);
-      
-      results.dependencyManagement = Math.min(10, depScore);
-      
-      // Test coverage score
-      const testDirs = [
-        'tests',
-        'test',
-        '__tests__'
-      ];
-      
-      const testDirExists = testDirs.some(dir => filePresence[dir]);
-      results.testCoverage = testDirExists ? 7 : 3;
-      
-      // File organization score update
-      const orgDirs = [
-        'src',
-        'docs',
-        'test',
-        'tests',
-        '__tests__'
-      ];
-      
-      const orgScore = orgDirs.reduce((score, dir) => {
-        return score + (filePresence[dir] ? 2 : 0);
-      }, results.fileOrganization / 2);
-      
-      results.fileOrganization = Math.min(10, orgScore);
-      
-      // Security score
-      const securityFiles = [
-        '.github/workflows',
-        '.github/CODEOWNERS'
-      ];
-      
-      const secScore = securityFiles.reduce((score, file) => {
-        return score + (filePresence[file] ? 5 : 0);
-      }, 0);
-      
-      results.securityVulnerabilities = Math.min(10, secScore);
-    } catch (error) {
-      console.error('Error analyzing repository structure:', error);
-    }
-    
-    // Step 3: Analyze languages used
-    updateProgress({ step: 'languages', progress: 21 });
-    try {
-      const { data: languages } = await octokit.rest.repos.listLanguages({
-        owner,
-        repo
-      });
-      
-      results.details.languages = languages;
-      
-      // Code complexity score based on languages used
-      const totalBytes = Object.values(languages).reduce((sum, bytes) => sum + bytes, 0);
-      const languageCount = Object.keys(languages).length;
-      
-      // Higher score for repositories with more focused language usage
-      results.codeComplexity = Math.min(10, Math.max(1, 10 - (languageCount - 1)));
-      
-      // Code duplication estimate based on repository size and languages
-      // This is a rough estimate since we can't directly measure duplication without cloning
-      const primaryLanguageBytes = Math.max(...Object.values(languages));
-      const primaryLanguageRatio = primaryLanguageBytes / totalBytes;
-      
-      // Higher primary language ratio might suggest less duplication (more focused)
-      results.codeDuplication = Math.min(10, Math.max(1, primaryLanguageRatio * 10));
-    } catch (error) {
-      console.error('Error analyzing languages:', error);
-    }
-    
-    // Step 4: Analyze contributors
-    updateProgress({ step: 'contributors', progress: 28 });
-    try {
-      const { data: contributors } = await octokit.rest.repos.listContributors({
-        owner,
-        repo,
-        per_page: 100
-      });
-      
-      results.details.contributors = contributors;
-      
-      // Adjust maintainability based on number of contributors
-      const contributorCount = contributors.length;
-      const contributorScore = Math.min(5, contributorCount / 2);
-      
-      results.maintainabilityIndex = Math.min(10, (results.maintainabilityIndex + contributorScore) / 2);
-    } catch (error) {
-      console.error('Error analyzing contributors:', error);
-    }
-    
-    // Step 5: Analyze commit history
-    updateProgress({ step: 'commits', progress: 35 });
-    try {
-      const { data: commitActivity } = await octokit.rest.repos.getCommitActivityStats({
-        owner,
-        repo
-      });
-      
-      results.details.commitActivity = commitActivity;
-      
-      // Calculate commit frequency
-      let totalCommits = 0;
-      if (commitActivity) {
-        totalCommits = commitActivity.reduce((sum, week) => sum + week.total, 0);
-      }
-      
-      // Get repo age in weeks
-      const createdAt = new Date(results.details.repoInfo.created_at);
-      const now = new Date();
-      const ageInWeeks = Math.max(1, Math.floor((now - createdAt) / (1000 * 60 * 60 * 24 * 7)));
-      
-      // Calculate average commits per week
-      const commitsPerWeek = totalCommits / ageInWeeks;
-      
-      // Score based on commit frequency
-      results.commitHistory = Math.min(10, Math.max(1, Math.log2(commitsPerWeek + 1) * 3));
-    } catch (error) {
-      console.error('Error analyzing commit history:', error);
-    }
-    
-    // Step 6: Analyze branches
-    updateProgress({ step: 'branches', progress: 42 });
-    try {
-      const { data: branches } = await octokit.rest.repos.listBranches({
-        owner,
-        repo,
-        per_page: 100
-      });
-      
-      // Number of branches can indicate development activity and organization
-      const branchCount = branches.length;
-      
-      // Adjust file organization score based on branch count
-      // Too few branches might indicate poor organization, too many might indicate chaos
-      const branchScore = Math.min(5, 5 * (1 - Math.abs(Math.log10(branchCount) - 1) / 2));
-      
-      results.fileOrganization = Math.min(10, (results.fileOrganization + branchScore) / 2);
-    } catch (error) {
-      console.error('Error analyzing branches:', error);
-    }
-    
-    // Step 7: Check pull requests
-    updateProgress({ step: 'pull-requests', progress: 49 });
-    try {
-      const { data: pullRequests } = await octokit.rest.pulls.list({
-        owner,
-        repo,
-        state: 'all',
-        per_page: 100
-      });
-      
-      // Analyze PR process
-      const openPRs = pullRequests.filter(pr => pr.state === 'open').length;
-      const closedPRs = pullRequests.filter(pr => pr.state === 'closed').length;
-      const totalPRs = openPRs + closedPRs;
-      
-      if (totalPRs > 0) {
-        // PR close ratio indicates how well the project handles contributions
-        const closeRatio = closedPRs / totalPRs;
         
-        // Adjust maintainability score based on PR process
-        const prScore = closeRatio * 10;
-        
-        results.maintainabilityIndex = Math.min(10, (results.maintainabilityIndex + prScore) / 2);
-      }
-    } catch (error) {
-      console.error('Error analyzing pull requests:', error);
-    }
-    
-    // Step 8: Review issues
-    updateProgress({ step: 'issues', progress: 56 });
-    try {
-      const { data: issues } = await octokit.rest.issues.listForRepo({
-        owner,
-        repo,
-        state: 'all',
-        per_page: 100
-      });
-      
-      // Analyze issue handling
-      const openIssues = issues.filter(issue => issue.state === 'open' && !issue.pull_request).length;
-      const closedIssues = issues.filter(issue => issue.state === 'closed' && !issue.pull_request).length;
-      const totalIssues = openIssues + closedIssues;
-      
-      if (totalIssues > 0) {
-        // Issue close ratio indicates how responsive the project is
-        const closeRatio = closedIssues / totalIssues;
-        
-        // Adjust maintainability score based on issue handling
-        const issueScore = closeRatio * 10;
-        
-        results.maintainabilityIndex = Math.min(10, (results.maintainabilityIndex + issueScore) / 2);
-      }
-    } catch (error) {
-      console.error('Error analyzing issues:', error);
-    }
-    
-    // New Step: Analyze Code Patterns (before workflows)
-    updateProgress({ step: 'code-patterns', progress: 60 });
-    try {
-      // Sample common files for pattern detection
-      const patternDetectionFiles = [
-        // JavaScript/TypeScript/Web
-        'package.json',
-        'tsconfig.json',
-        'src/index.js',
-        'src/index.ts',
-        'src/App.js',
-        'src/App.tsx',
-        'src/store/index.js',
-        'src/context/index.js',
-        
-        // Svelte specific
-        'packages/svelte/src/index.js',
-        'packages/svelte/compiler/index.js',
-        'packages/svelte/src/runtime/index.js',
-        'src/lib/index.js',
-        'src/routes/+layout.svelte',
-        'svelte.config.js',
-        
-        // Python
-        'setup.py',
-        'requirements.txt',
-        'src/__init__.py',
-        'app.py',
-        'main.py',
-        
-        // Go
-        'go.mod',
-        'main.go',
-        'cmd/main.go',
-        'pkg/server/server.go',
-        'internal/app/app.go',
-        
-        // Java/Kotlin
-        'pom.xml',
-        'build.gradle',
-        'src/main/java/com/example/Application.java',
-        'src/main/kotlin/com/example/Application.kt',
-        
-        // Ruby
-        'Gemfile',
-        'app/models/application_record.rb',
-        'config/routes.rb',
-        'app/controllers/application_controller.rb',
-        
-        // Generic files that might contain patterns
-        'README.md',
-        'Dockerfile',
-        '.github/workflows/ci.yml',
-        'docker-compose.yml'
-      ];
-      
-      // Still analyze pattern detection and code quality, but only for informational purposes
-      for (const file of patternDetectionFiles) {
+        // Check for Dependabot alerts if we have permission
         try {
-          const { data: fileData } = await octokit.rest.repos.getContent({
+          const { data: dependabotAlerts } = await octokit.rest.repos.listVulnerabilityAlerts({
             owner,
-            repo,
-            path: file,
+            repo
           });
           
-          // Only process text files
-          if (fileData && fileData.type === 'file') {
-            const content = Buffer.from(fileData.content, 'base64').toString();
-            
-            // Check for various patterns (just for informational purposes)
-            detectCodePatterns(content, file, results);
+          // Deduct points for open security alerts
+          if (dependabotAlerts && dependabotAlerts.length > 0) {
+            const deduction = Math.min(5, dependabotAlerts.length);
+            results.securityVulnerabilities = Math.max(1, results.securityVulnerabilities - deduction);
           }
         } catch (err) {
-          // File doesn't exist, skip
+          // Might not have permission for this API
         }
+      } catch (error) {
+        console.error('Error analyzing security:', error);
       }
       
-      // We're no longer calculating design patterns or best practices scores here
+      // Step 13: Calculate final scores
+      updateProgress({ step: 'calculate', progress: 91 });
       
-    } catch (error) {
-      console.error('Error analyzing code patterns:', error);
-    }
-    
-    // Step 9: Check CI/CD workflows
-    updateProgress({ step: 'workflows', progress: 63 });
-    try {
-      // Check if the repository has GitHub Actions workflows
-      try {
-        const { data: workflows } = await octokit.rest.actions.listRepoWorkflows({
-          owner,
-          repo
-        });
-        
-        if (workflows && workflows.total_count > 0) {
-          // Having CI/CD workflows improves security and code quality
-          results.securityVulnerabilities = Math.min(10, results.securityVulnerabilities + 3);
-          results.styleConsistency = Math.min(10, results.styleConsistency + 2);
-        }
-      } catch (err) {
-        // GitHub Actions might not be enabled for this repo
-      }
-    } catch (error) {
-      console.error('Error checking workflows:', error);
-    }
-    
-    // Step 10: Analyze README for comprehensiveness
-    updateProgress({ step: 'readme', progress: 70 });
-    try {
-      try {
-        const { data: readmeData } = await octokit.rest.repos.getReadme({
-          owner,
-          repo
-        });
-        
-        if (readmeData) {
-          // Get README content
-          const readmeContent = Buffer.from(readmeData.content, 'base64').toString();
-          
-          // Analyze README quality based on length and sections
-          const readmeLength = readmeContent.length;
-          const hasHeadings = (readmeContent.match(/#+\s+\w+/g) || []).length;
-          const hasCodeBlocks = (readmeContent.match(/```/g) || []).length > 1;
-          const hasImages = readmeContent.includes('![');
-          
-          // Score based on README quality
-          let readmeScore = 0;
-          if (readmeLength > 500) readmeScore += 2;
-          if (readmeLength > 2000) readmeScore += 2;
-          if (hasHeadings > 3) readmeScore += 2;
-          if (hasCodeBlocks) readmeScore += 2;
-          if (hasImages) readmeScore += 2;
-          
-          // Update documentation score
-          results.documentationCoverage = Math.min(10, (results.documentationCoverage + readmeScore) / 2);
-        }
-      } catch (err) {
-        // README might not exist
-      }
-    } catch (error) {
-      console.error('Error analyzing README:', error);
-    }
-    
-    // Step 11: Check for package.json and analyze dependencies
-    updateProgress({ step: 'dependencies', progress: 77 });
-    try {
-      try {
-        const { data: packageJson } = await octokit.rest.repos.getContent({
-          owner,
-          repo,
-          path: 'package.json'
-        });
-        
-        if (packageJson) {
-          // Parse package.json
-          const packageData = JSON.parse(Buffer.from(packageJson.content, 'base64').toString());
-          
-          // Check dependencies
-          const hasDependencies = packageData.dependencies && Object.keys(packageData.dependencies).length > 0;
-          const hasDevDependencies = packageData.devDependencies && Object.keys(packageData.devDependencies).length > 0;
-          
-          // Check for testing frameworks
-          const testingDeps = ['jest', 'mocha', 'jasmine', 'karma', 'chai', 'cypress', 'enzyme', '@testing-library'];
-          const hasTestingDeps = hasDevDependencies && testingDeps.some(dep => 
-            Object.keys(packageData.devDependencies).some(d => d.includes(dep))
-          );
-          
-          // Check for linting tools
-          const lintingDeps = ['eslint', 'prettier', 'tslint', 'stylelint'];
-          const hasLintingDeps = hasDevDependencies && lintingDeps.some(dep => 
-            Object.keys(packageData.devDependencies).some(d => d.includes(dep))
-          );
-          
-          // Security related packages
-          const securityDeps = ['helmet', 'csrf', 'xss', 'sanitize', 'validate'];
-          const hasSecurityDeps = hasDependencies && securityDeps.some(dep => 
-            Object.keys(packageData.dependencies).some(d => d.includes(dep))
-          );
-          
-          // Update scores
-          if (hasTestingDeps) {
-            results.testCoverage = Math.min(10, results.testCoverage + 3);
-          }
-          
-          if (hasLintingDeps) {
-            results.styleConsistency = Math.min(10, results.styleConsistency + 2);
-          }
-          
-          if (hasSecurityDeps) {
-            results.securityVulnerabilities = Math.min(10, results.securityVulnerabilities + 2);
-          }
-          
-          // Overall dependency management score - improved to be more lenient
-          let depManagementScore = 5;  // Start with a moderate baseline
-          if (hasDependencies) depManagementScore += 2;
-          if (hasDevDependencies) depManagementScore += 1;
-          if (packageData.scripts && Object.keys(packageData.scripts).length > 0) depManagementScore += 1;
-          if (packageData.scripts && Object.keys(packageData.scripts).length > 3) depManagementScore += 1;
-          
-          // Check for dependency version pinning (a best practice)
-          const hasPinnedVersions = Object.entries(packageData.dependencies || {}).some(
-            ([_, version]) => /^\d/.test(version)
-          );
-          if (hasPinnedVersions) depManagementScore += 1;
-          
-          results.dependencyManagement = Math.min(10, depManagementScore);
-        }
-      } catch (err) {
-        // package.json might not exist
-      }
-    } catch (error) {
-      console.error('Error analyzing dependencies:', error);
-    }
-    
-    // Step 12: Security analysis
-    updateProgress({ step: 'security', progress: 84 });
-    try {
-      // Check for security policies
-      try {
-        await octokit.rest.repos.getContent({
-          owner,
-          repo,
-          path: 'SECURITY.md'
-        });
-        
-        // Has security policy
-        results.securityVulnerabilities = Math.min(10, results.securityVulnerabilities + 2);
-      } catch (err) {
-        // SECURITY.md doesn't exist
+      // Calculate code complexity (if not already set)
+      if (results.codeComplexity === 0) {
+        results.codeComplexity = 5; // Default value
       }
       
-      // Check for Dependabot alerts if we have permission
-      try {
-        const { data: dependabotAlerts } = await octokit.rest.repos.listVulnerabilityAlerts({
-          owner,
-          repo
-        });
-        
-        // Deduct points for open security alerts
-        if (dependabotAlerts && dependabotAlerts.length > 0) {
-          const deduction = Math.min(5, dependabotAlerts.length);
-          results.securityVulnerabilities = Math.max(1, results.securityVulnerabilities - deduction);
-        }
-      } catch (err) {
-        // Might not have permission for this API
+      // Calculate maintainability (if not already set)
+      if (results.maintainabilityIndex === 0) {
+        results.maintainabilityIndex = 5; // Default value
       }
-    } catch (error) {
-      console.error('Error analyzing security:', error);
+      
+      // Calculate code duplication (if not already set)
+      if (results.codeDuplication === 0) {
+        results.codeDuplication = 5; // Default value
+      }
+      
+      // Calculate overall score (average of non-bonus metrics, excluding those we removed)
+      const coreMetrics = Object.entries(results)
+        .filter(([key, value]) => 
+          typeof value === 'number' && 
+          key !== 'overallScore' && 
+          !key.startsWith('details') &&
+          !results.bonusMetrics.includes(key) 
+        );
+      
+      // Calculate core score without bonus metrics
+      const coreScore = coreMetrics.reduce((sum, [_, value]) => sum + value, 0) / coreMetrics.length;
+      
+      // Get bonus score (the average of the bonus metrics, but only counting positive contributions)
+      const bonusMetrics = results.bonusMetrics.map(key => Math.max(0, results[key]));
+      const bonusScore = bonusMetrics.length > 0 
+        ? bonusMetrics.reduce((sum, value) => sum + value, 0) / bonusMetrics.length / 5 // Smaller bonus contribution
+        : 0;
+      
+      // Combine core score with bonus score
+      results.overallScore = Math.round(coreScore + bonusScore);
+      
+      // Ensure score is within range
+      results.overallScore = Math.min(10, Math.max(1, results.overallScore));
+      
+      // Step 14: Complete
+      updateProgress({ step: 'complete', progress: 100 });
     }
-    
-    // Step 13: Calculate final scores
-    updateProgress({ step: 'calculate', progress: 91 });
-    
-    // Calculate code complexity (if not already set)
-    if (results.codeComplexity === 0) {
-      results.codeComplexity = 5; // Default value
-    }
-    
-    // Calculate maintainability (if not already set)
-    if (results.maintainabilityIndex === 0) {
-      results.maintainabilityIndex = 5; // Default value
-    }
-    
-    // Calculate code duplication (if not already set)
-    if (results.codeDuplication === 0) {
-      results.codeDuplication = 5; // Default value
-    }
-    
-    // Calculate overall score (average of non-bonus metrics, excluding those we removed)
-    const coreMetrics = Object.entries(results)
-      .filter(([key, value]) => 
-        typeof value === 'number' && 
-        key !== 'overallScore' && 
-        !key.startsWith('details') &&
-        !results.bonusMetrics.includes(key) 
-      );
-    
-    // Calculate core score without bonus metrics
-    const coreScore = coreMetrics.reduce((sum, [_, value]) => sum + value, 0) / coreMetrics.length;
-    
-    // Get bonus score (the average of the bonus metrics, but only counting positive contributions)
-    const bonusMetrics = results.bonusMetrics.map(key => Math.max(0, results[key]));
-    const bonusScore = bonusMetrics.length > 0 
-      ? bonusMetrics.reduce((sum, value) => sum + value, 0) / bonusMetrics.length / 5 // Smaller bonus contribution
-      : 0;
-    
-    // Combine core score with bonus score
-    results.overallScore = Math.round(coreScore + bonusScore);
-    
-    // Ensure score is within range
-    results.overallScore = Math.min(10, Math.max(1, results.overallScore));
-    
-    // Step 14: Complete
-    updateProgress({ step: 'complete', progress: 100 });
     
     return results;
   } catch (error) {
     console.error('Error analyzing repository:', error);
-    throw error;
+    
+    // Always return at least partial results with whatever data we have
+    updateProgress({ step: 'complete', progress: 100 });
+    return results;
   }
 };
 
