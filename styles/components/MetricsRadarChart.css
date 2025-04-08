@@ -1,0 +1,53 @@
+.chart-container {
+  position: relative;
+  height: 350px;
+  width: 100%;
+  margin: 0 auto;
+  background-color: rgba(255, 255, 255, 0.9);
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  padding: 10px;
+  transition: all 0.3s ease;
+}
+
+/* Override Chart.js defaults for better visibility */
+canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Add these to ensure text colors in the chart are visible */
+.chart-js-tooltip {
+  background-color: rgba(0, 0, 0, 0.8) !important;
+  color: white !important;
+  padding: 8px 12px !important;
+  border-radius: 4px !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Ensure light background for chart area */
+.chart-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: white;
+  border-radius: 8px;
+  z-index: -1;
+}
+
+/* Dark mode overrides */
+@media (prefers-color-scheme: dark) {
+  .chart-container {
+    background-color: rgba(30, 30, 30, 0.9);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+  }
+  
+  .chart-container::before {
+    background: #1e1e1e;
+  }
+} 

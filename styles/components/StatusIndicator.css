@@ -1,0 +1,77 @@
+:root {
+  --status-error: #dc2626;
+  --status-success: #16a34a;
+  --status-analyzing: #2563eb;
+  --status-idle: #4b5563;
+  --card-bg: #fff;
+  --card-border: #d1d5db;
+  --text-title: #1f2937;
+  --text-body: #374151;
+  --text-muted: #4b5563;
+  --text-emphasis: #1f2937;
+}
+
+.status-container {
+  width: 100%;
+  margin-bottom: 1.5rem;
+}
+
+.status-card {
+  background-color: var(--card-bg);
+  border-radius: 8px;
+  border-left: 4px solid var(--status-analyzing);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  padding: 1rem;
+  transition: all 0.3s ease;
+}
+
+.status-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.status-icon {
+  font-size: 1.25rem;
+  margin-right: 0.75rem;
+}
+
+.status-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-title);
+}
+
+.status-message {
+  font-size: 0.95rem;
+  color: var(--text-body);
+  margin-bottom: 0.75rem;
+  padding-left: 2.25rem;
+}
+
+.current-task {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  padding-left: 2.25rem;
+}
+
+.task-label {
+  font-weight: 500;
+  color: var(--text-emphasis);
+}
+
+/* Dark mode overrides */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --status-error: #ef4444;
+    --status-success: #22c55e;
+    --status-analyzing: #3b82f6;
+    --status-idle: #9ca3af;
+    --card-bg: #1e1e1e;
+    --card-border: #4b5563;
+    --text-title: #f9fafb;
+    --text-body: #f3f4f6;
+    --text-muted: #d1d5db;
+    --text-emphasis: #f3f4f6;
+  }
+} 

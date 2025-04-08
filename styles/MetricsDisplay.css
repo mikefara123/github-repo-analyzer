@@ -1,0 +1,611 @@
+.score-excellent {
+  background-color: #10B981;
+  color: #ffffff;
+  font-weight: bold;
+  padding: 0.25rem 0.75rem;
+  border-radius: 4px;
+}
+
+.score-good {
+  background-color: #6366F1; 
+  color: #ffffff;
+  font-weight: bold;
+  padding: 0.25rem 0.75rem;
+  border-radius: 4px;
+}
+
+.score-fair {
+  background-color: #F59E0B;
+  color: #000000;
+  font-weight: bold;
+  padding: 0.25rem 0.75rem;
+  border-radius: 4px;
+}
+
+.score-poor {
+  background-color: #EF4444;
+  color: #ffffff;
+  font-weight: bold;
+  padding: 0.25rem 0.75rem;
+  border-radius: 4px;
+}
+
+.metrics-display {
+  margin-top: 2rem;
+  padding: 1.5rem;
+  background-color: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  color: #1f2937;
+}
+
+.metrics-container {
+  width: 100%;
+  color: #1f2937;
+  background-color: white;
+  padding: 1rem;
+  border-radius: 8px;
+}
+
+.overall-score {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 2rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid #eee;
+}
+
+.score-label {
+  font-size: 1.2rem;
+  color: #1f2937;
+}
+
+.score-value {
+  font-size: 3rem;
+  font-weight: bold;
+  color: #0040B0;
+}
+
+.tabs {
+  display: flex;
+  border-bottom: 1px solid #eee;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.tab-button {
+  padding: 0.8rem 1.2rem;
+  background: none;
+  border: none;
+  font-size: 1rem;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  transition: all 0.2s;
+  color: #1f2937;
+}
+
+.tab-button:hover {
+  background-color: #f9f9f9;
+  color: #000000;
+}
+
+.tab-button.active {
+  border-bottom-color: #0040B0;
+  color: #0040B0;
+  font-weight: 600;
+}
+
+.tab-content {
+  padding: 1rem 0;
+}
+
+.no-data {
+  color: #1f2937;
+  font-style: italic;
+  text-align: center;
+  padding: 2rem;
+}
+
+/* Override for dark mode */
+@media (prefers-color-scheme: dark) {
+  .metrics-display,
+  .metrics-container {
+    background-color: #1e1e1e;
+    color: #f3f4f6;
+  }
+  
+  .tab-button {
+    color: #f3f4f6;
+  }
+  
+  .tab-button:hover {
+    background-color: #323232;
+    color: #ffffff;
+  }
+  
+  .tab-button.active {
+    color: #60A5FA;
+    border-bottom-color: #60A5FA;
+  }
+  
+  .score-label {
+    color: #f3f4f6;
+  }
+  
+  .score-value {
+    color: #60A5FA;
+  }
+  
+  .metric-list-label {
+    color: #f3f4f6;
+  }
+  
+  .metric-list-description {
+    color: #d1d5db;
+  }
+  
+  .recommendation-card,
+  .pattern-card,
+  .language-item,
+  .issue-card {
+    background-color: #242424;
+  }
+  
+  .recommendation-category {
+    color: #f3f4f6;
+  }
+  
+  .recommendation-description,
+  .pattern-description,
+  .issue-description {
+    color: #d1d5db;
+  }
+  
+  .recommendation-tips {
+    color: #f3f4f6;
+  }
+  
+  .pattern-name,
+  .issue-name {
+    color: #f3f4f6;
+  }
+  
+  .pattern-location,
+  .issue-location {
+    color: #d1d5db;
+  }
+  
+  .metrics-tabs button {
+    color: #d1d5db;
+  }
+  
+  .metrics-tabs button:hover {
+    background-color: #323232;
+    color: #ffffff;
+  }
+  
+  .metrics-tabs button.active {
+    background-color: #3b82f6;
+    color: #ffffff;
+  }
+  
+  .metrics-overview h3,
+  .recommendations h3,
+  .code-quality h3,
+  .infrastructure h3,
+  .security h3,
+  .documentation h3 {
+    color: #f3f4f6;
+  }
+  
+  .metrics-summary li {
+    background-color: transparent;
+    border-bottom-color: #4b5563;
+  }
+  
+  .metrics-summary li:hover {
+    background-color: #323232;
+  }
+  
+  .metrics-chart {
+    background-color: #1e1e1e;
+  }
+  
+  .recommendation-item,
+  .metric-detail {
+    background-color: #242424;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  }
+  
+  .recommendation-item h4 {
+    color: #60A5FA;
+  }
+  
+  .score-interpretation p {
+    color: #d1d5db;
+  }
+}
+
+/* Overview Tab Styles */
+.metrics-list-view {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.metric-list-item {
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.metric-list-item:last-child {
+  border-bottom: none;
+}
+
+.metric-list-label {
+  font-weight: 600;
+  font-size: 1.1rem;
+  color: #1f2937;
+  margin-bottom: 0.25rem;
+}
+
+.metric-list-score {
+  font-weight: 500;
+  font-size: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.metric-list-description {
+  font-size: 0.95rem;
+  color: #374151;
+  line-height: 1.5;
+}
+
+.export-button {
+  margin-top: 1rem;
+  padding: 0.5rem 1rem;
+  background-color: #0070f3;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.export-button:hover {
+  background-color: #0051a8;
+}
+
+.view-toggle {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 2rem;
+}
+
+.view-button {
+  padding: 0.6rem 1.2rem;
+  background: none;
+  border: 1px solid #ddd;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-weight: 500;
+}
+
+.view-button:first-child {
+  border-top-left-radius: 6px;
+  border-bottom-left-radius: 6px;
+}
+
+.view-button:last-child {
+  border-top-right-radius: 6px;
+  border-bottom-right-radius: 6px;
+}
+
+.view-button.active {
+  background-color: #0070f3;
+  color: white;
+  border-color: #0070f3;
+}
+
+.view-button:hover:not(.active) {
+  background-color: #f5f5f5;
+}
+
+/* Recommendations Tab Styles */
+.recommendations-container {
+  padding: 1rem 0;
+}
+
+.recommendations-title {
+  margin-top: 0;
+  font-size: 1.3rem;
+  color: #333;
+  margin-bottom: 0.5rem;
+}
+
+.recommendations-intro {
+  margin-bottom: 1.5rem;
+  color: #555;
+}
+
+.recommendations-list {
+  display: grid;
+  grid-template-columns: repeat(1, 1fr);
+  gap: 1.5rem;
+}
+
+.recommendation-card {
+  background-color: #f9f9f9;
+  border-radius: 8px;
+  padding: 1.25rem;
+  border-left: 4px solid #0070f3;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.recommendation-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.recommendation-category {
+  margin: 0;
+  font-size: 1.1rem;
+  color: #333;
+}
+
+.recommendation-score {
+  font-weight: bold;
+  font-size: 1rem;
+}
+
+.recommendation-description {
+  margin-bottom: 1rem;
+  color: #555;
+  font-style: italic;
+}
+
+.recommendation-tips {
+  margin: 0;
+  padding-left: 1.5rem;
+  color: #333;
+}
+
+.recommendation-tips li {
+  margin-bottom: 0.5rem;
+}
+
+/* Languages Tab Styles */
+.languages-bar {
+  display: flex;
+  height: 20px;
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 1.5rem;
+}
+
+.language-segment {
+  height: 100%;
+  transition: all 0.2s;
+}
+
+.language-segment:hover {
+  transform: scaleY(1.2);
+}
+
+.languages-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.language-item {
+  display: flex;
+  flex-direction: column;
+  padding: 0.8rem;
+  border-radius: 8px;
+  background-color: #f9f9f9;
+}
+
+.language-name {
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.language-metrics {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9rem;
+  color: #666;
+}
+
+/* Pattern Tab Styles */
+.patterns-tab h3,
+.languages-tab h3 {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+  color: #333;
+  font-size: 1.2rem;
+}
+
+.pattern-group {
+  margin-bottom: 2rem;
+}
+
+.pattern-type {
+  font-size: 1.1rem;
+  color: #333;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #eee;
+}
+
+.patterns-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.pattern-card {
+  background-color: #f9f9f9;
+  border-radius: 6px;
+  padding: 1rem;
+  border-left: 4px solid #0070f3;
+}
+
+.pattern-name {
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: #333;
+}
+
+.pattern-description {
+  font-size: 0.9rem;
+  color: #555;
+  margin-bottom: 0.75rem;
+}
+
+.pattern-location {
+  font-size: 0.8rem;
+  color: #777;
+  font-family: monospace;
+}
+
+.quality-issues-section {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid #eee;
+}
+
+.issues-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.issue-card {
+  background-color: #f9f9f9;
+  border-radius: 6px;
+  padding: 1rem;
+}
+
+.issue-card.high {
+  border-left: 4px solid #c62828;
+}
+
+.issue-card.medium {
+  border-left: 4px solid #e67700;
+}
+
+.issue-card.low {
+  border-left: 4px solid #888;
+}
+
+.issue-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.issue-name {
+  font-weight: 600;
+  color: #333;
+}
+
+.issue-impact {
+  font-size: 0.8rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  color: white;
+}
+
+.issue-card.high .issue-impact {
+  background-color: #c62828;
+}
+
+.issue-card.medium .issue-impact {
+  background-color: #e67700;
+}
+
+.issue-card.low .issue-impact {
+  background-color: #888;
+}
+
+.issue-description {
+  font-size: 0.9rem;
+  color: #555;
+  margin-bottom: 0.75rem;
+}
+
+.issue-location {
+  font-size: 0.8rem;
+  color: #777;
+  font-family: monospace;
+}
+
+.hint {
+  font-size: 0.9rem;
+  color: #666;
+  margin-bottom: 1.5rem;
+  font-style: italic;
+}
+
+@media (min-width: 768px) {
+  .recommendations-list {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.metrics-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.metrics-summary {
+  margin-top: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #eee;
+}
+
+.metrics-summary h4 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  font-size: 1.2rem;
+}
+
+.metrics-summary ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 0.75rem;
+}
+
+.metrics-summary li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  background-color: transparent;
+  border-radius: 6px;
+  transition: transform 0.2s;
+}
+
+.metrics-summary li:hover {
+  transform: translateY(-2px);
+  background-color: #f5f5f5;
+}
+
+.metrics-chart {
+  margin-top: 1rem;
+  display: flex;
+  justify-content: center;
+  padding: 1rem;
+  max-height: 400px;
+} 
